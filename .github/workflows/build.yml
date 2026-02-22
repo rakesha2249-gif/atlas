@@ -33,20 +33,18 @@ jobs:
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
-          
-          # ಬಿಲ್ಡ್ ಮೊದಲು ಕ್ಲೀನ್ ಮಾಡಿ (ಇದು Error 127 ತಡೆಯಲು ಬಹಳ ಮುಖ್ಯ)
-          make mrproper
-          rm -rf out
-          
-          # A21s Defconfig ಸೆಟ್ ಮಾಡಿ
           export DEFCONFIG="a217s_defconfig"
+          
+          # ಬಿಲ್ಡ್ ಸಿದ್ಧತೆ (ಇದು ಬಹಳ ಮುಖ್ಯ - scripts ಫೋಲ್ಡರ್ ರೆಡಿ ಮಾಡಲು)
+          make mrproper
+          make scripts
           
           # ಬೂಟ್ ಲೂಪ್ ಮತ್ತು ಕ್ಯಾಮೆರಾ ಡ್ರೈವರ್ಸ್ ಫಿಕ್ಸ್
           echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> arch/arm64/configs/$DEFCONFIG
           echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> arch/arm64/configs/$DEFCONFIG
           echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> arch/arm64/configs/$DEFCONFIG
 
-          # ಬಿಲ್ಡ್ ಹಂತಗಳು (O=out ಬಳಸದೆ ನೇರವಾಗಿ ಬಿಲ್ಡ್ ಮಾಡೋಣ, ಇದರಿಂದ ಸ್ಕ್ರಿಪ್ಟ್ ಎರರ್ ಬರುವುದಿಲ್ಲ)
+          # ಅಂತಿಮ ಬಿಲ್ಡ್ ಹಂತ
           make $DEFCONFIG
           make -j$(nproc --all) CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
 
