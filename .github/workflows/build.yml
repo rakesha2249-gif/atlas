@@ -15,40 +15,41 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Install All Essential Tools
+      - name: Install Tools
         run: |
           sudo apt update
-          sudo apt install -y bc cpio flex bison git python3 python-is-python3 tar perl wget curl lz4 libssl-dev libelf-dev build-essential ccache
+          sudo apt install -y bc cpio flex bison git python3 python-is-python3 tar perl wget curl lz4 libssl-dev libelf-dev build-essential
 
-      - name: Fetch Toolchain
+      - name: Fetch Toolchains
         run: |
           mkdir toolchains && cd toolchains
+          # GCC 4.9 ಅನ್ನು CROSS_COMPILE ಗಾಗಿ ಬಳಸೋಣ (ಸ್ಯಾಮ್‌ಸಂಗ್‌ಗೆ ಇದು ಹೆಚ್ಚು ಸ್ಥಿರ)
           git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
           git clone --depth=1 -b androidcc-4.9 https://github.com/rsuntk/toolchains.git google
 
       - name: Build Kernel
         run: |
-          # ಟೂಲ್‌ಚೈನ್ ಸೆಟ್ ಮಾಡಿ
+          # ಟೂಲ್‌ಚೈನ್ ಮತ್ತು ಪಾತ್ ಸೆಟ್ಟಿಂಗ್ಸ್
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/google/bin:$PATH
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
+          
+          # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು A21s ಗೆ ಸರಿಯಾದ Defconfig ಬಳಸಿ
+          # ಒಂದು ವೇಳೆ a217s_defconfig ಇಲ್ಲದಿದ್ದರೆ, exynos850-a12snsxx_defconfig ಬಳಸಿ
           export DEFCONFIG="a217s_defconfig"
           
-          # ಬೂಟ್ ಲೂಪ್ ಮತ್ತು ಕ್ಯಾಮೆರಾ ಡ್ರೈವರ್ಸ್ ಫಿಕ್ಸ್
-          echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> arch/arm64/configs/$DEFCONFIG
-          echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> arch/arm64/configs/$DEFCONFIG
-          echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> arch/arm64/configs/$DEFCONFIG
+          # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು ಅತಿ ಮುಖ್ಯ ಕೋಡ್
+          # ಇದು SELinux ಅನ್ನು Permissive ಮಾಡುತ್ತದೆ, ಇದರಿಂದ ಪೋರ್ಟ್ ಮಾಡಿದ ROM ಬೂಟ್ ಆಗುತ್ತದೆ.
+          make $DEFCONFIG
+          echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> .config
+          
+          # ಕ್ಯಾಮೆರಾ ಫಿಕ್ಸ್ ಕೋಡ್
+          echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> .config
+          echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> .config
 
-          # ಬಿಲ್ಡ್ ಸಿದ್ಧತೆ (Error 127 ಹೋಗಲಾಡಿಸಲು)
-          make mrproper
-          make ARCH=arm64 $DEFCONFIG
-          
-          # ಸೋರ್ಸ್ ಸ್ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಹಸ್ತಚಾಲಿತವಾಗಿ ರೆಡಿ ಮಾಡೋಣ
-          make ARCH=arm64 scripts
-          
-          # ಅಂತಿಮ ಬಿಲ್ಡ್ ಹಂತ
-          make -j$(nproc --all) ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
+          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (Error 2 ತಡೆಯಲು ccache ಬಳಸಬೇಡಿ)
+          make -j$(nproc --all) CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
 
       - name: Upload Image
         uses: actions/upload-artifact@v4
