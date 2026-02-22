@@ -1,26 +1,189 @@
+name: Build Kernel A21s
+
+on:
+  workflow_dispatch:
+    inputs:
+      BRANCH:
+        description: 'Kernel branch'
+        default: 'main'
+        required: true
+      AK3_NAME:
+        description: 'AnyKernel3 Zip Name'
+        default: 'A21s-ColorUI-Kernel'
+        required: true
+      KERNELSU_NEXT:
+        description: 'Use KernelSU-Next ?'
+        type: boolean
+      SELINUX_PERMISSIVE:
+        description: 'Permissive SELinux (Recommended for A21s Ports)'
+        type: boolean
+        default: true
+      UPLOAD_TO_TG:
+        description: 'Upload to Telegram'
+        type: boolean
+      UPLOAD_TO_GH:
+        description: 'Upload to GitHub Release'
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+        with:
+          repository: rakesha2249-gif/atlas # ನಿಮ್ಮ ಸೋರ್ಸ್ ಲಿಂಕ್
+          path: kernel_root
+          ref: ${{ github.event.inputs.BRANCH }}
+          fetch-depth: 0
+
+      - name: Prepare dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install bc cpio flex bison aptitude git python-is-python3 tar perl wget curl lz4 -y
+          sudo aptitude install libssl-dev -y
+        working-directory: kernel_root
+
+      - name: Fetch Toolchains (Clang 11 + GCC 4.9)
+        run: |
+          mkdir toolchains && cd toolchains
+          git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
+          git clone --depth=1 -b androidcc-4.9 https://github.com/rsuntk/toolchains.git google
+        working-directory: kernel_root
+
       - name: Build Kernel
+        id: buildKernel
         run: |
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/google/bin:$PATH
           export ARCH=arm64
-          export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # A12s ಬದಲು A21s (SM-A217F) Defconfig ಬಳಸಿ
+          # A21s ನಿಖರವಾದ Defconfig
           export DEFCONFIG="a217s_defconfig" 
           
-          make O=out $DEFCONFIG
-          make -j$(nproc --all) O=out \
-                      CC=clang \
-                      CROSS_COMPILE=aarch64-linux-android- \
-                      CLANG_TRIPLE=aarch64-linux-gnu-
+          # SELinux Permissive ಫಿಕ್ಸ್ (ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು)
+          if [[ "${{ github.event.inputs.SELINUX_PERMISSIVE }}" == 'true' ]]; then
+            echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> arch/arm64/configs/$DEFCONFIG
+          fi
+
+          # ಕ್ಯಾಮೆರಾ ಫಿಕ್ಸ್ ಕೋಡ್ ಆಡ್ ಮಾಡುವುದು
+          echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> arch/arm64/configs/$DEFCONFIG
+          echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> arch/arm64/configs/$DEFCONFIG
+
+          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ
+          bash $(pwd)/build_kernel.sh kernel --jobs $(nproc --all) $DEFCONFIG
+          
+          echo "buildDetails=A21s-$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
         working-directory: kernel_root
+
+      - name: Upload AnyKernel3
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel3-${{ github.event.inputs.AK3_NAME }}
+          path: kernel_root/anykernel3/*
+
+      - name: Create AnyKernel3 ZIP
+        run: |
+          cd kernel_root/anykernel3
+          zip -r9 "AnyKernel3-${{ github.event.inputs.AK3_NAME }}.zip" ./*
+        working-directory: kernel_root
+
+      - name: Upload to GitHub Release
+        if: github.event.inputs.UPLOAD_TO_GH == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "A21s-Build-$(date +'%Y%m%d')"
+          files: kernel_root/anykernel3/AnyKernel3-${{ github.event.inputs.AK3_NAME }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        with:
+         name: Config-${{ steps.buildKernel.outputs.buildDetails }}
+         path: kernel_root/build_config.txt
 
       - name: Upload kernel images
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-A21s-Fix
+          name: Kernel-${{ steps.buildKernel.outputs.buildDetails }}
           path: |
-            kernel_root/out/arch/arm64/boot/Image.gz
-            kernel_root/out/arch/arm64/boot/dts/exynos/exynos850-a217s*.dtb
-            kernel_root/out/arch/arm64/boot/dts/samsung/a217s*.dtb
+            kernel_root/arch/arm64/boot/Image.gz
+            kernel_root/arch/arm64/boot/dts/exynos/*.dtb
+            kernel_root/arch/arm64/boot/dts/samsung/*.dtb
+      - name: Copy Image to AnyKernel3
+        run: |
+          cp kernel_root/arch/arm64/boot/Image kernel_root/anykernel3/
+      - name: Upload AnyKernel3
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel3-${{ github.event.inputs.AK3_NAME }}
+          path: kernel_root/anykernel3/*
+          compression-level: 9
+
+      - name: Download AnyKernel3 artifact
+        if: ${{ github.event.inputs.UPLOAD_TO_TG == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: AnyKernel3-${{ github.event.inputs.AK3_NAME }}
+          path: ak3_upload
+
+      - name: Create AnyKernel3 ZIP 
+        run: |
+          cd kernel_root/anykernel3
+          zip -r9 "AnyKernel3-${{ github.event.inputs.AK3_NAME }}.zip" ./*
+          ls -lh "AnyKernel3-${{ github.event.inputs.AK3_NAME }}.zip"
+          
+      - name: Upload to Telegram
+        if: github.event.inputs.UPLOAD_TO_TG == 'true'
+        env:
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then   
+          ZIP="./anykernel3/AnyKernel3-${{ github.event.inputs.AK3_NAME }}.zip"
+          cat buildDetails.txt
+          git clone --depth=1 -b telegram https://github.com/maazm7d/builder.git i && cp ./i/xedbot.sh . && rm -rf i
+          bash $(pwd)/xedbot.sh "$ZIP" "`cat buildDetails.txt`"
+          fi
+        working-directory: kernel_root
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          set -e
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$latest_tag" ]; then
+          echo "No previous tag found. Using full commit history."
+          changelog=$(git log --pretty=format:"- %s (%an)" --no-merges)
+          else
+          echo "Found last tag: $latest_tag"
+          changelog=$(git log "${latest_tag}..HEAD" --pretty=format:"- %s (%an)" --no-merges)
+          fi
+                # Save changelog to output
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$changelog" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+        working-directory: kernel_root
+
+      - name: Generate tag name
+        id: tag
+        run: |
+          TAG_NAME="build-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+        working-directory: kernel_root
+
+      - name: Upload to GitHub Release
+        if: github.event.inputs.UPLOAD_TO_GH == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          name: "${{ steps.tag.outputs.tag_name }}"
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: kernel_root/anykernel3/AnyKernel3-${{ github.event.inputs.AK3_NAME }}.zip
+          repository: maazm7d/kernel_samsung_a12
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        
+
+
+
