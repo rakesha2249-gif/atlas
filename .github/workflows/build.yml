@@ -3,49 +3,27 @@ name: Build Kernel A21s
 on:
   workflow_dispatch:
     inputs:
-      BRANCH:
-        description: 'Kernel branch'
-        default: 'main'
-        required: true
       AK3_NAME:
         description: 'AnyKernel3 Zip Name'
-        default: 'A21s-ColorUI-Kernel'
+        default: 'A21s-Atlas-Fix'
         required: true
-      KERNELSU_NEXT:
-        description: 'Use KernelSU-Next ?'
-        type: boolean
-      SELINUX_PERMISSIVE:
-        description: 'Permissive SELinux (Recommended for A21s Ports)'
-        type: boolean
-        default: true
-      UPLOAD_TO_TG:
-        description: 'Upload to Telegram'
-        type: boolean
-      UPLOAD_TO_GH:
-        description: 'Upload to GitHub Release'
-        type: boolean
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Kernel Source
+      - name: Checkout Source
         uses: actions/checkout@v4
         with:
-          repository: rakesha2249-gif/atlas # ನಿಮ್ಮ ಸೋರ್ಸ್ ಲಿಂಕ್
           path: kernel_root
-          ref: ${{ github.event.inputs.BRANCH }}
-          fetch-depth: 0
 
-      - name: Prepare dependencies
+      - name: Install Tools
         run: |
-          sudo apt update -y
-          sudo apt install bc cpio flex bison aptitude git python-is-python3 tar perl wget curl lz4 -y
-          sudo aptitude install libssl-dev -y
+          sudo apt update
+          sudo apt install bc cpio flex bison git python-is-python3 tar perl wget curl lz4 libssl-dev -y
         working-directory: kernel_root
 
-      - name: Fetch Toolchains (Clang 11 + GCC 4.9)
+      - name: Fetch Toolchain
         run: |
           mkdir toolchains && cd toolchains
           git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
@@ -53,57 +31,31 @@ jobs:
         working-directory: kernel_root
 
       - name: Build Kernel
-        id: buildKernel
         run: |
+          # ಟೂಲ್‌ಚೈನ್ ಸೆಟ್ಟಿಂಗ್ಸ್
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/google/bin:$PATH
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # A21s ನಿಖರವಾದ Defconfig
-          export DEFCONFIG="a217s_defconfig" 
+          # A21s ಗಾಗಿ ಸರಿಯಾದ Defconfig
+          export DEFCONFIG="a217s_defconfig"
           
-          # SELinux Permissive ಫಿಕ್ಸ್ (ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು)
-          if [[ "${{ github.event.inputs.SELINUX_PERMISSIVE }}" == 'true' ]]; then
-            echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> arch/arm64/configs/$DEFCONFIG
-          fi
-
-          # ಕ್ಯಾಮೆರಾ ಫಿಕ್ಸ್ ಕೋಡ್ ಆಡ್ ಮಾಡುವುದು
+          # ಬೂಟ್ ಲೂಪ್ ಮತ್ತು ಕ್ಯಾಮೆರಾ ಫಿಕ್ಸ್ ಕೋಡ್
+          echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> arch/arm64/configs/$DEFCONFIG
           echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> arch/arm64/configs/$DEFCONFIG
           echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> arch/arm64/configs/$DEFCONFIG
 
-          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ
-          bash $(pwd)/build_kernel.sh kernel --jobs $(nproc --all) $DEFCONFIG
-          
-          echo "buildDetails=A21s-$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
+          # ಬಿಲ್ಡ್ ಕಮಾಂಡ್ (ನೇರವಾಗಿ make ಬಳಸಿ)
+          make O=out $DEFCONFIG
+          make -j$(nproc --all) O=out CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
         working-directory: kernel_root
 
-      - name: Upload AnyKernel3
+      - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: AnyKernel3-${{ github.event.inputs.AK3_NAME }}
-          path: kernel_root/anykernel3/*
-
-      - name: Create AnyKernel3 ZIP
-        run: |
-          cd kernel_root/anykernel3
-          zip -r9 "AnyKernel3-${{ github.event.inputs.AK3_NAME }}.zip" ./*
-        working-directory: kernel_root
-
-      - name: Upload to GitHub Release
-        if: github.event.inputs.UPLOAD_TO_GH == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "A21s-Build-$(date +'%Y%m%d')"
-          files: kernel_root/anykernel3/AnyKernel3-${{ github.event.inputs.AK3_NAME }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-        with:
-         name: Config-${{ steps.buildKernel.outputs.buildDetails }}
-         path: kernel_root/build_config.txt
-
-      - name: Upload kernel images
-        uses: actions/upload-artifact@v4
+          name: ${{ github.event.inputs.AK3_NAME }}
+          path: kernel_root/out/arch/arm64/boot/Image.gz
         with:
           name: Kernel-${{ steps.buildKernel.outputs.buildDetails }}
           path: |
