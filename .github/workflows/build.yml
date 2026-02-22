@@ -41,15 +41,16 @@ jobs:
           make mrproper
           make $DEFCONFIG
           
-          # KernelSU ಎರರ್ ಬರದಂತೆ ಅದನ್ನು ಪೂರ್ತಿಯಾಗಿ ಡಿಸೇಬಲ್ ಮಾಡೋಣ
+          # KernelSU ಎರರ್ ಬರದಂತೆ ಅದನ್ನು ಪೂರ್ತಿಯಾಗಿ ತೆಗೆದುಹಾಕಿ (ಇದು ನಿಮ್ಮ Error 2 ಫಿಕ್ಸ್ ಮಾಡುತ್ತದೆ)
           sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/g' .config || true
+          sed -i '/kernelsu/d' drivers/Makefile || true
           
           # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು ಮತ್ತು ಕ್ಯಾಮೆರಾ ಫಿಕ್ಸ್
           echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> .config
           echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> .config
           echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> .config
 
-          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (ccache ಬಳಸದೆ ನೇರವಾಗಿ ಬಿಲ್ಡ್ ಮಾಡಿ)
+          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (ccache ಇಲ್ಲದೆ ನೇರವಾಗಿ ಬಿಲ್ಡ್ ಮಾಡಿ)
           make -j$(nproc --all) CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
 
       - name: Upload Image
