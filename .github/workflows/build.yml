@@ -1,20 +1,26 @@
       - name: Build Kernel
         run: |
-          # ಟೂಲ್‌ಚೈನ್ ಪಾತ್ ಸೆಟ್ ಮಾಡಿ
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/google/bin:$PATH
-          
-          # ಬಿಲ್ಡ್ ಪ್ಯಾರಾಮೀಟರ್‌ಗಳು
           export ARCH=arm64
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # A21s ಗಾಗಿ ಸರಿಯಾದ Defconfig ಸೆಟ್ ಮಾಡಿ
-          make O=out a217s_defconfig
+          # A12s ಬದಲು A21s (SM-A217F) Defconfig ಬಳಸಿ
+          export DEFCONFIG="a217s_defconfig" 
           
-          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (build_kernel.sh ಬದಲು ನೇರವಾಗಿ make ಬಳಸಿ)
+          make O=out $DEFCONFIG
           make -j$(nproc --all) O=out \
                       CC=clang \
                       CROSS_COMPILE=aarch64-linux-android- \
                       CLANG_TRIPLE=aarch64-linux-gnu-
         working-directory: kernel_root
+
+      - name: Upload kernel images
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel-A21s-Fix
+          path: |
+            kernel_root/out/arch/arm64/boot/Image.gz
+            kernel_root/out/arch/arm64/boot/dts/exynos/exynos850-a217s*.dtb
+            kernel_root/out/arch/arm64/boot/dts/samsung/a217s*.dtb
