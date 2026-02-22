@@ -1,40 +1,20 @@
-name: Build Kernel A21s
-
-on:
-  workflow_dispatch:
-    inputs:
-      AK3_NAME:
-        description: 'AnyKernel3 Zip Name'
-        default: 'A21s-Atlas-Kernel'
-        required: true
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Kernel Source
-        uses: actions/checkout@v4
-        with:
-          repository: rakesha2249-gif/atlas # ನಿಮ್ಮ ಸೋರ್ಸ್ ಲಿಂಕ್
-          path: kernel_root
-
-      - name: Setup Toolchain
-        run: |
-          mkdir toolchains && cd toolchains
-          git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
-          git clone --depth=1 -b androidcc-4.9 https://github.com/rsuntk/toolchains.git google
-        working-directory: kernel_root
-
       - name: Build Kernel
         run: |
+          # ಟೂಲ್‌ಚೈನ್ ಪಾತ್ ಸೆಟ್ ಮಾಡಿ
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/google/bin:$PATH
+          
+          # ಬಿಲ್ಡ್ ಪ್ಯಾರಾಮೀಟರ್‌ಗಳು
           export ARCH=arm64
+          export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # A21s ನಿಖರವಾದ Defconfig
-          export DEFCONFIG="a217s_defconfig" 
+          # A21s ಗಾಗಿ ಸರಿಯಾದ Defconfig ಸೆಟ್ ಮಾಡಿ
+          make O=out a217s_defconfig
           
-          # ಬಿಲ್ಡ್ ಕಮಾಂಡ್
-          bash build_kernel.sh kernel --jobs $(nproc --all) $DEFCONFIG 
+          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (build_kernel.sh ಬದಲು ನೇರವಾಗಿ make ಬಳಸಿ)
+          make -j$(nproc --all) O=out \
+                      CC=clang \
+                      CROSS_COMPILE=aarch64-linux-android- \
+                      CLANG_TRIPLE=aarch64-linux-gnu-
         working-directory: kernel_root
