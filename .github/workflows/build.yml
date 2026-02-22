@@ -1,31 +1,3 @@
-name: Build Kernel A21s
-
-on:
-  workflow_dispatch:
-    inputs:
-      AK3_NAME:
-        description: 'AnyKernel3 Zip Name'
-        default: 'A21s-Atlas-Final'
-        required: true
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo apt update
-          sudo apt install bc cpio flex bison git python-is-python3 tar perl wget curl lz4 libssl-dev -y
-
-      - name: Fetch Toolchain
-        run: |
-          mkdir toolchains && cd toolchains
-          git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
-          git clone --depth=1 -b androidcc-4.9 https://github.com/rsuntk/toolchains.git google
-
       - name: Build Kernel
         run: |
           # ಟೂಲ್‌ಚೈನ್ ಸೆಟ್ ಮಾಡಿ
@@ -34,20 +6,21 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # A21s ನಿಖರವಾದ Defconfig
+          # ಬಿಲ್ಡ್ ಆಗುವ ಮುನ್ನ ಸ್ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ ಸರಿಪಡಿಸಿ (ಇದು ಬಹಳ ಮುಖ್ಯ)
+          make clean
+          make mrproper
+          
+          # A21s Defconfig ಸೆಟ್ ಮಾಡಿ
           export DEFCONFIG="a217s_defconfig"
           
-          # ಬೂಟ್ ಲೂಪ್ ಮತ್ತು ಕ್ಯಾಮೆರಾ ಡ್ರೈವರ್ಸ್ ಸೇರಿಸಿ
+          # ಬೂಟ್ ಲೂಪ್ ಮತ್ತು ಕ್ಯಾಮೆರಾ ಡ್ರೈವರ್ಸ್ ಫಿಕ್ಸ್
           echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> arch/arm64/configs/$DEFCONFIG
           echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> arch/arm64/configs/$DEFCONFIG
           echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> arch/arm64/configs/$DEFCONFIG
 
-          # ಬಿಲ್ಡ್ ಪ್ರಕ್ರಿಯೆ
+          # ಈಗ ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ
           make O=out $DEFCONFIG
-          make -j$(nproc --all) O=out CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.event.inputs.AK3_NAME }}
-          path: out/arch/arm64/boot/Image.gz
+          make -j$(nproc --all) O=out \
+                      CC=clang \
+                      CROSS_COMPILE=aarch64-linux-android- \
+                      CLANG_TRIPLE=aarch64-linux-gnu-
