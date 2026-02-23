@@ -37,7 +37,7 @@ jobs:
           # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಸರಿಯಾದ Defconfig ಹೆಸರು
           export DEFCONFIG="exynos850-a21snsxx_defconfig"
           
-          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಕಸವನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ (Error 2 ತಡೆಯಲು)
+          # ಬಿಲ್ಡ್ ಮೊದಲು ಪೂರ್ತಿಯಾಗಿ ಕ್ಲೀನ್ ಮಾಡಿ (Error 2 ತಡೆಯಲು)
           make mrproper
           make $DEFCONFIG
           
