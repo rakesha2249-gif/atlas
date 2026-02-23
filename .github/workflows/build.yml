@@ -1,58 +1,86 @@
-name: Build Kernel A21s
+name: Build Kernel
 
 on:
   workflow_dispatch:
     inputs:
-      AK3_NAME:
-        description: 'AnyKernel3 Zip Name'
-        default: 'A21s-Atlas-Final'
+      BRANCH:
+        description: Kernel branch
+        default: 'master'
         required: true
-
+      AK3_NAME:
+        description: Enter custom name for AnyKernel3 artifact
+        required: true
+      KERNELSU_NEXT:
+        description: Use KernelSU-Next ?
+        type: boolean
+      SELINUX_PERMISSIVE:
+        description: Permissive SELinux
+        type: boolean
+        default: true
+      UPLOAD_TO_TG:
+        description: Upload to Telegram
+        type: boolean
+      UPLOAD_TO_GH:
+        description: Upload to GitHub Release
+        type: boolean
+      
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Source
+      - name: Checkout Kernel Source
         uses: actions/checkout@v4
+        with:
+          path: kernel_root
+          ref: ${{ github.event.inputs.BRANCH }}
+          fetch-depth: 0
 
-      - name: Install Tools
+      - name: Prepare dependencies
         run: |
-          sudo apt update
-          sudo apt install -y bc cpio flex bison git python3 python-is-python3 tar perl wget curl lz4 libssl-dev libelf-dev build-essential
+          sudo apt update -y
+          sudo apt install bc cpio flex bison aptitude git python-is-python3 tar perl wget curl lz4 libssl-dev libelf-dev build-essential -y
+        working-directory: kernel_root
 
-      - name: Fetch Toolchain
+      - name: Fetch toolchains (Clang 11 + GCC 4.9)
         run: |
           mkdir toolchains && cd toolchains
           git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
           git clone --depth=1 -b androidcc-4.9 https://github.com/rsuntk/toolchains.git google
+        working-directory: kernel_root
 
-      - name: Build Kernel
+      - name: Build kernel
+        id: buildKernel
         run: |
-          # ಟೂಲ್‌ಚೈನ್ ಸೆಟ್ಟಿಂಗ್ಸ್
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/google/bin:$PATH
-          export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
+          export ARCH=arm64
           
-          # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಸರಿಯಾದ Defconfig
+          # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ನಿಖರವಾದ Defconfig
           export DEFCONFIG="exynos850-a21snsxx_defconfig"
           
-          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಕಸವನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ (Error 2 ತಡೆಯಲು)
+          # ಕ್ಲೀನ್ ಬಿಲ್ಡ್ ಸಿದ್ಧತೆ
           make mrproper
           make $DEFCONFIG
           
-          # ಅತಿ ಮುಖ್ಯ: ಮಿಸ್ಸಿಂಗ್ KernelSU ಬೈಪಾಸ್ ಮಾಡಿ (ಇದು ನಿಮ್ಮ Error 2 ಫಿಕ್ಸ್ ಮಾಡುತ್ತದೆ)
+          # ಮಿಸ್ಸಿಂಗ್ KernelSU ಬೈಪಾಸ್ (ಇದು ನಿಮ್ಮ Error 2 ಫಿಕ್ಸ್ ಮಾಡುತ್ತದೆ)
           sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/g' .config || true
           sed -i 's/obj-y += kernelsu\///g' drivers/Makefile || true
-          
-          # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು SELinux Permissive ಕಡ್ಡಾಯ
-          echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> .config
-          
-          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (ccache ಬಳಸದೆ ನೇರವಾಗಿ ಬಿಲ್ಡ್ ಮಾಡಿ)
+
+          # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು SELinux Permissive
+          if [[ "${{ github.event.inputs.SELINUX_PERMISSIVE }}" == 'true' ]]; then
+            echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> .config
+          fi
+
+          # ಅಂತಿಮ ಬಿಲ್ಡ್ (ccache ಬಳಸದೆ)
           make -j$(nproc --all) CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
+          
+          echo "buildDetails=A21s-$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
+        working-directory: kernel_root   
 
       - name: Upload Image
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.AK3_NAME }}
-          path: arch/arm64/boot/Image.gz
+          path: kernel_root/arch/arm64/boot/Image.gz
