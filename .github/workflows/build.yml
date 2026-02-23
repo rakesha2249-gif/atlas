@@ -37,11 +37,11 @@ jobs:
           # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಸರಿಯಾದ Defconfig ಹೆಸರು
           export DEFCONFIG="exynos850-a21snsxx_defconfig"
           
-          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಕಸವನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ (Error 2 ತಡೆಯಲು ಬಹಳ ಮುಖ್ಯ)
+          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಕಸವನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ (Error 2 ತಡೆಯಲು)
           make mrproper
           make $DEFCONFIG
           
-          # ಅತಿ ಮುಖ್ಯ: ಮಿಸ್ಸಿಂಗ್ KernelSU ಪೂರ್ತಿಯಾಗಿ ಬೈಪಾಸ್ ಮಾಡಿ (ಇದು ನಿಮ್ಮ Error 2 ಫಿಕ್ಸ್ ಮಾಡುತ್ತದೆ)
+          # ಅತಿ ಮುಖ್ಯ: ಮಿಸ್ಸಿಂಗ್ KernelSU ಬೈಪಾಸ್ ಮಾಡಿ (ಇದು ನಿಮ್ಮ Error 2 ಫಿಕ್ಸ್ ಮಾಡುತ್ತದೆ)
           sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/g' .config || true
           sed -i '/kernelsu/d' drivers/Makefile || true
           
