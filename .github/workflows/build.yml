@@ -37,11 +37,11 @@ jobs:
           # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಸರಿಯಾದ Defconfig ಹೆಸರು
           export DEFCONFIG="exynos850-a21snsxx_defconfig"
           
-          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಫೈಲ್‌ಗಳನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ
+          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಕಸವನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ (Error 127/2 ತಡೆಯಲು)
           make mrproper
           make $DEFCONFIG
           
-          # ಬೂಟ್ ಲೂಪ್ ಮತ್ತು KernelSU ಮಿಸ್ಸಿಂಗ್ ಎರರ್ ಪೂರ್ತಿಯಾಗಿ ಬೈಪಾಸ್ ಮಾಡಲು
+          # KernelSU ಎರರ್ ಬರದಂತೆ ಅತಿ ಮುಖ್ಯ ಬೈಪಾಸ್
           sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/g' .config || true
           sed -i '/kernelsu/d' drivers/Makefile || true
           
@@ -52,7 +52,7 @@ jobs:
           echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> .config
           echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> .config
 
-          # ಅಂತಿಮ ಬಿಲ್ಡ್ ಹಂತ (ccache ಬಳಸದೆ)
+          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (ccache ಬಳಸದೆ ನೇರವಾಗಿ ಬಿಲ್ಡ್ ಮಾಡಿ)
           make -j$(nproc --all) CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
 
       - name: Upload Image
