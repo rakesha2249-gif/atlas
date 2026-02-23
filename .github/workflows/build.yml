@@ -3,75 +3,60 @@ name: Build Kernel A21s
 on:
   workflow_dispatch:
     inputs:
-      BRANCH:
-        description: Kernel branch
-        default: 'main'
-        required: true
       AK3_NAME:
-        description: Enter custom name for AnyKernel3 artifact
+        description: 'AnyKernel3 Zip Name'
+        default: 'A21s-Atlas-Final'
         required: true
-      SELINUX_PERMISSIVE:
-        description: Permissive SELinux
-        type: boolean
-        default: true
-      UPLOAD_TO_GH:
-        description: Upload to GitHub Release
-        type: boolean
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
-        with:
-          path: kernel_root
 
-      - name: Install Dependencies
+      - name: Install Essential Tools
         run: |
-          sudo apt update -y
-          sudo apt install bc cpio flex bison git python-is-python3 tar perl wget curl lz4 libssl-dev libelf-dev build-essential -y
-        working-directory: kernel_root
+          sudo apt update
+          sudo apt install -y bc cpio flex bison git python3 python-is-python3 tar perl wget curl lz4 libssl-dev libelf-dev build-essential
 
       - name: Fetch Toolchains
         run: |
           mkdir toolchains && cd toolchains
           git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
           git clone --depth=1 -b androidcc-4.9 https://github.com/rsuntk/toolchains.git google
-        working-directory: kernel_root
 
       - name: Build Kernel
-        id: buildKernel
         run: |
+          # ಟೂಲ್‌ಚೈನ್ ಸೆಟ್ಟಿಂಗ್ಸ್
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/google/bin:$PATH
+          export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
-          export ARCH=arm64
           
-          # A21s ನಿಖರವಾದ Defconfig ಬಳಸಿ
-          # ಒಂದು ವೇಳೆ 'a217s_defconfig' ಇಲ್ಲದಿದ್ದರೆ ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಹೆಸರನ್ನು ಇಲ್ಲಿ ಹಾಕಿ
+          # A21s ಗಾಗಿ ಸರಿಯಾದ Defconfig
           export DEFCONFIG="a217s_defconfig"
           
+          # ಬಿಲ್ಡ್ ಸಿದ್ಧತೆ (Error 127/2 ಮತ್ತು ccache ಎರರ್ ತಡೆಯಲು)
           make mrproper
           make $DEFCONFIG
           
-          # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು SELinux Permissive ಕಡ್ಡಾಯ
+          # ಬೂಟ್ ಲೂಪ್ ಮತ್ತು KernelSU ಮಿಸ್ಸಿಂಗ್ ಎರರ್ ಪೂರ್ತಿಯಾಗಿ ಬೈಪಾಸ್ ಮಾಡಲು
+          sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/g' .config || true
+          sed -i '/kernelsu/d' drivers/Makefile || true
+          
+          # ಪೋರ್ಟೆಡ್ ರೋಮ್ ಬೂಟ್ ಆಗಲು SELinux Permissive ಕಡ್ಡಾಯ
           echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> .config
           
           # ಕ್ಯಾಮೆರಾ ಫಿಕ್ಸ್ ಕೋಡ್
           echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> .config
           echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> .config
 
-          # ಬಿಲ್ಡ್ ಪ್ರಕ್ರಿಯೆ (KernelSU ಮಿಸ್ಸಿಂಗ್ ಎರರ್ ಬರದಂತೆ ನೇರ ಬಿಲ್ಡ್)
+          # ಅಂತಿಮ ಬಿಲ್ಡ್ ಹಂತ (ccache ಬಳಸದೆ)
           make -j$(nproc --all) CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
-          
-          echo "tag_name=A21s-$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
-        working-directory: kernel_root
 
-      - name: Upload AnyKernel3
+      - name: Upload Image
         uses: actions/upload-artifact@v4
         with:
-          name: AnyKernel3-${{ github.event.inputs.AK3_NAME }}
-          path: kernel_root/arch/arm64/boot/Image.gz
-
+          name: ${{ github.event.inputs.AK3_NAME }}
+          path: arch/arm64/boot/Image.gz
