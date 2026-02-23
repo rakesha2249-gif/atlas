@@ -34,10 +34,10 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # A21s ಗಾಗಿ ಸರಿಯಾದ Defconfig
-          export DEFCONFIG="a217s_defconfig"
+          # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಸರಿಯಾದ Defconfig ಹೆಸರು
+          export DEFCONFIG="exynos850-a21snsxx_defconfig"
           
-          # ಬಿಲ್ಡ್ ಸಿದ್ಧತೆ (Error 127/2 ಮತ್ತು ccache ಎರರ್ ತಡೆಯಲು)
+          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಫೈಲ್‌ಗಳನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ
           make mrproper
           make $DEFCONFIG
           
@@ -45,7 +45,7 @@ jobs:
           sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/g' .config || true
           sed -i '/kernelsu/d' drivers/Makefile || true
           
-          # ಪೋರ್ಟೆಡ್ ರೋಮ್ ಬೂಟ್ ಆಗಲು SELinux Permissive ಕಡ್ಡಾಯ
+          # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು SELinux Permissive ಕಡ್ಡಾಯ
           echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> .config
           
           # ಕ್ಯಾಮೆರಾ ಫಿಕ್ಸ್ ಕೋಡ್
