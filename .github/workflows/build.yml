@@ -15,12 +15,12 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Install Essential Tools
+      - name: Install Tools
         run: |
           sudo apt update
           sudo apt install -y bc cpio flex bison git python3 python-is-python3 tar perl wget curl lz4 libssl-dev libelf-dev build-essential
 
-      - name: Fetch Toolchains
+      - name: Fetch Toolchain
         run: |
           mkdir toolchains && cd toolchains
           git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
@@ -34,24 +34,20 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-android-
           export CLANG_TRIPLE=aarch64-linux-gnu-
           
-          # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಸರಿಯಾದ Defconfig ಹೆಸರು
+          # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಸರಿಯಾದ Defconfig
           export DEFCONFIG="exynos850-a21snsxx_defconfig"
           
-          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಕಸವನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ (Error 127/2 ತಡೆಯಲು)
+          # ಬಿಲ್ಡ್ ಮೊದಲು ಹಳೆಯ ಕಸವನ್ನು ಕ್ಲೀನ್ ಮಾಡಿ (Error 2 ತಡೆಯಲು)
           make mrproper
           make $DEFCONFIG
           
-          # KernelSU ಎರರ್ ಬರದಂತೆ ಅತಿ ಮುಖ್ಯ ಬೈಪಾಸ್
+          # ಅತಿ ಮುಖ್ಯ: ಮಿಸ್ಸಿಂಗ್ KernelSU ಬೈಪಾಸ್ ಮಾಡಿ (ಇದು ನಿಮ್ಮ Error 2 ಫಿಕ್ಸ್ ಮಾಡುತ್ತದೆ)
           sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/g' .config || true
-          sed -i '/kernelsu/d' drivers/Makefile || true
+          sed -i 's/obj-y += kernelsu\///g' drivers/Makefile || true
           
           # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು SELinux Permissive ಕಡ್ಡಾಯ
           echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> .config
           
-          # ಕ್ಯಾಮೆರಾ ಫಿಕ್ಸ್ ಕೋಡ್
-          echo "CONFIG_VIDEO_EXYNOS_CAMERA=y" >> .config
-          echo "CONFIG_CAMERA_CIS_GC02M1_OBJ=y" >> .config
-
           # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (ccache ಬಳಸದೆ ನೇರವಾಗಿ ಬಿಲ್ಡ್ ಮಾಡಿ)
           make -j$(nproc --all) CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
 
