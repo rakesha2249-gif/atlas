@@ -1,58 +1,40 @@
-name: Build Kernel A21s
-
+name: Build A21s Kernel
 on:
   workflow_dispatch:
-    inputs:
-      AK3_NAME:
-        description: 'AnyKernel3 Zip Name'
-        default: 'A21s-Atlas-Final'
-        required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
+    - name: Checkout Source Code
+      uses: actions/checkout@v3
+      with:
+        submodules: 'true'
+        fetch-depth: 1
 
-      - name: Install Essential Tools
-        run: |
-          sudo apt update
-          sudo apt install -y bc cpio flex bison git python3 python-is-python3 tar perl wget curl lz4 libssl-dev libelf-dev build-essential
+    - name: Setup Environment and ccache
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ccache git make gcc bc bison flex libssl-dev zip
 
-      - name: Fetch Toolchains
-        run: |
-          mkdir toolchains && cd toolchains
-          git clone --depth=1 -b clang-11 https://github.com/rsuntk/toolchains.git clang
-          git clone --depth=1 -b androidcc-4.9 https://github.com/rsuntk/toolchains.git google
+    - name: Setup Proton Clang
+      run: |
+        git clone --depth=1 https://github.com/kdrag0n/proton-clang toolchain
 
-      - name: Build Kernel
-        run: |
-          # ಟೂಲ್‌ಚೈನ್ ಸೆಟ್ಟಿಂಗ್ಸ್
-          export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/google/bin:$PATH
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-android-
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          
-          # ನಿಮ್ಮ ಸೋರ್ಸ್‌ನಲ್ಲಿರುವ ಸರಿಯಾದ Defconfig ಹೆಸರು
-          export DEFCONFIG="exynos850-a21snsxx_defconfig"
-          
-          # ಬಿಲ್ಡ್ ಮೊದಲು ಪೂರ್ತಿಯಾಗಿ ಕ್ಲೀನ್ ಮಾಡಿ (Error 2 ತಡೆಯಲು)
-          make mrproper
-          make $DEFCONFIG
-          
-          # ಅತಿ ಮುಖ್ಯ: ಮಿಸ್ಸಿಂಗ್ KernelSU ಬೈಪಾಸ್ ಮಾಡಿ (ಇದು ನಿಮ್ಮ Error 2 ಫಿಕ್ಸ್ ಮಾಡುತ್ತದೆ)
-          sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/g' .config || true
-          sed -i '/kernelsu/d' drivers/Makefile || true
-          
-          # ಬೂಟ್ ಲೂಪ್ ತಡೆಯಲು SELinux Permissive ಕಡ್ಡಾಯ
-          echo "CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE=y" >> .config
-          
-          # ಬಿಲ್ಡ್ ಶುರು ಮಾಡಿ (ccache ಬಳಸದೆ ನೇರವಾಗಿ ಬಿಲ್ಡ್ ಮಾಡಿ, ಇದರಿಂದ Error 127 ಬರುವುದಿಲ್ಲ)
-          make -j$(nproc --all) CC=clang CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu-
+    - name: Compile Kernel
+      run: |
+        export PATH="$(pwd)/toolchain/bin:$PATH"
+        export ARCH=arm64
+        export CC="ccache clang"
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+        
+        make O=out exynos850-a217f_defconfig
+        make -j$(nproc) O=out
 
-      - name: Upload Image
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.event.inputs.AK3_NAME }}
-          path: arch/arm64/boot/Image.gz
+    - name: Upload Kernel Image
+      uses: actions/upload-artifact@v3
+      with:
+        name: Image
+        path: out/arch/arm64/boot/Image
+        
